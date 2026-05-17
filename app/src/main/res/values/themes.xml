@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.AITokuteiSensei" parent="Theme.MaterialComponents.Light" />
+</resources>
