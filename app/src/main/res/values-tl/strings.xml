@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AI Tokutei Sensei</string>
+    <string name="onboarding_welcome">Maligayang pagdating sa AI Tokutei Sensei! Paki-pili ang iyong gustong wika para sa suporta sa pag-aaral.</string>
+    <string name="onboarding_setup_model">Para makapag-aral offline, paki-download ang AI model file o piliin ang isang umiiral na local file.</string>
+    <string name="btn_back">Bumalik</string>
+    <string name="btn_continue">Ipagpatuloy</string>
+    <string name="btn_start_learning">Simulan ang Pag-aaral</string>
+    <string name="state_downloading">Kino-download ang data ng AI Tutor... Pakiusap huwag isara ang app.</string>
+    <string name="state_setup_complete">Kumpleto na ang AI setup! Handa nang tumulong sa iyo kahit kailan.</string>
+    <string name="chat_input_hint">Magtanong tungkol sa mga nursing term, teknik sa pag-aalaga, o mga tanong sa pagsusulit...</string>
+    <string name="chat_thinking">Sinusuri ang mga gabay sa pag-aaral at pinag-aaralan ang konteksto...</string>
+    <string name="dialog_clear_title">Burahin ang Kasaysayan</string>
+    <string name="dialog_clear_desc">Burahin ang lahat ng kasaysayan ng chat? Ang aksyong ito ay hindi na maaaring bawiin.</string>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AI Tokutei Sensei</string>
+    <string name="onboarding_welcome">Selamat datang di AI Tokutei Sensei! Silakan pilih bahasa pengantar yang Anda inginkan.</string>
+    <string name="onboarding_setup_model">Untuk mulai belajar secara offline, silakan unduh file model AI atau pilih file lokal yang sudah ada.</string>
+    <string name="btn_back">Kembali</string>
+    <string name="btn_continue">Lanjutkan</string>
+    <string name="btn_start_learning">Mulai Belajar</string>
+    <string name="state_downloading">Mengunduh data AI Tutor... Mohon jangan tutup aplikasi.</string>
+    <string name="state_setup_complete">Pengaturan AI selesai! Siap membantu Anda kapan saja.</string>
+    <string name="chat_input_hint">Tanyakan tentang istilah keperawatan, teknik perawatan, atau soal ujian...</string>
+    <string name="chat_thinking">Memeriksa panduan belajar dan menganalisis konteks...</string>
+    <string name="dialog_clear_title">Hapus Riwayat</string>
+    <string name="dialog_clear_desc">Hapus semua riwayat obrolan? Tindakan ini tidak dapat dibatalkan.</string>
+</resources>

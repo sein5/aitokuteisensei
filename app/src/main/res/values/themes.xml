@@ -1,4 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.AiTokuteiSensei" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#FF9800</item>
+        <item name="colorPrimaryDark">#F57C00</item>
+        <item name="colorAccent">#FFB74D</item>
 
-    <style name="Theme.AITokuteiSensei" parent="Theme.MaterialComponents.Light" />
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:statusBarColor">#F57C00</item>
+
+        <item name="colorControlActivated">#FF9800</item>
+        <item name="colorControlHighlight">#FFE0B2</item>
+    </style>
 </resources>

@@ -1,6 +1,7 @@
 package com.example.aitokuteisensei
 
 import android.content.Context
+import android.util.Log
 import com.example.aitokuteisensei.data.AppDatabase
 import com.example.aitokuteisensei.data.ChatMessageEntity
 import com.example.aitokuteisensei.data.UserPreferences
@@ -10,16 +11,18 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class GemmaChatEngine(private val context: Context) {
 
+    private val logTag = "GemmaChatEngine"
     private var engine: Engine? = null
     private var conversation: Conversation? = null
+
     private val knowledgeBaseManager = KnowledgeBaseManager(context)
     private val userPreferences = UserPreferences(context)
     private var userLang: String = "en"
@@ -27,84 +30,105 @@ class GemmaChatEngine(private val context: Context) {
     private val chatMessageDao = AppDatabase.getDatabase(context).chatMessageDao()
     val historyFlow = chatMessageDao.getAllMessagesFlow()
 
+    private val _isGenerating = MutableStateFlow(false)
+    val isGenerating = _isGenerating.asStateFlow()
+
     var isInitialized = false
         private set
 
-    // Helper map to convert language codes to full names for prompt guidance
     private val langNameMap = mapOf(
-        "cn" to "Chinese (中文)",
+        "ja" to "Japanese",
         "en" to "English",
-        "ind" to "Indonesian (Bahasa Indonesia)",
-        "jp" to "Japanese (日本語)",
-        "tgl" to "Tagalog"
+        "zh" to "Chinese",
+        "id" to "Indonesian",
+        "tl" to "Tagalog"
     )
 
-    suspend fun initialize(modelPath: String) = withContext(Dispatchers.IO) {
+    suspend fun initialize(modelFile: File) = withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext
+        try {
+            userLang = userPreferences.languageFlow.first()
 
-        // Fetch user selected language from DataStore
-        userLang = userPreferences.languageFlow.first()
+            // Sync local vectorized matching structures
+            knowledgeBaseManager.initialize(userLang)
 
-        // Initialize RAG knowledge base with dynamic language code
-        knowledgeBaseManager.initialize(userLang)
+            val engineConfig = EngineConfig(modelFile.absolutePath)
+            val initializedEngine = Engine(engineConfig)
+            engine = initializedEngine
 
-        val modelFile = File(modelPath)
-        if (!modelFile.exists()) {
-            throw IllegalArgumentException("Model file not found at: $modelPath")
+            val conversationConfig = ConversationConfig(
+                samplerConfig = SamplerConfig(
+                    topK = 40,
+                    topP = 0.95,
+                    temperature = 0.7
+                )
+            )
+            conversation = initializedEngine.createConversation(conversationConfig)
+            isInitialized = true
+            Log.d(logTag, "Gemma Local Hardware inference engine context bound successfully.")
+        } catch (e: Exception) {
+            Log.e(logTag, "Failed to instantiate local LLM execution framework: ${e.localizedMessage}", e)
+            isInitialized = false
         }
-
-        val config = EngineConfig(modelPath = modelFile.absolutePath)
-        val loadedEngine = Engine(config)
-        loadedEngine.initialize()
-        engine = loadedEngine
-
-        val samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.7)
-        val conversationConfig = ConversationConfig(samplerConfig = samplerConfig)
-
-        conversation = loadedEngine.createConversation(conversationConfig)
-        isInitialized = true
     }
 
-    fun sendMessageStream(message: String): Flow<String> = flow {
-        val currentConversation = conversation ?: throw IllegalStateException("Engine not initialized")
-
-        chatMessageDao.insertMessage(ChatMessageEntity(text = message, isUser = true))
-        val contextText = knowledgeBaseManager.retrieveContext(message, topK = 5)
-
+    suspend fun generateResponse(message: String) = withContext(Dispatchers.IO) {
+        val currentConversation = conversation ?: return@withContext
         val targetLanguageName = langNameMap[userLang] ?: "English"
 
-        // Augment system instructions to force-reply in the correct language
-        val augmentedPrompt = if (contextText.isNotEmpty()) {
-            """
-            You are a friendly, warm, and encouraging Tokutei Kaigo (Nursing Care) study partner and tutor.
-            CRITICAL RULE: You must respond and explain entirely in $targetLanguageName.
-            
-            Using the textbook context provided below, explain the concepts clearly to the student.
-            
-            [Textbook Context]:
-            $contextText
-            
-            [Student's Question]: 
-            $message
-            
-            [Tutor's Response in $targetLanguageName]:
-            """.trimIndent()
-        } else {
-            """
-            You are a friendly Tokutei Kaigo study tutor. The student is asking: "$message". 
-            CRITICAL RULE: You must respond entirely in $targetLanguageName.
-            Answer warmly, but remind them to verify specific rules with their study guide if you aren't certain.
-            """.trimIndent()
-        }
+        // 1. Commit the user prompt into structural storage layout right now
+        chatMessageDao.insertMessage(
+            ChatMessageEntity(text = message, isUser = true)
+        )
 
-        val responseBuffer = StringBuilder()
-        currentConversation.sendMessageAsync(augmentedPrompt).collect { responseMessage ->
-            val textChunk = responseMessage.toString()
-            responseBuffer.append(textChunk)
-            emit(textChunk)
-        }
+        // 2. Flip system processing execution flag to trigger UI shimmer layout
+        _isGenerating.value = true
 
-        chatMessageDao.insertMessage(ChatMessageEntity(text = responseBuffer.toString(), isUser = false))
+        try {
+            val systemContext = knowledgeBaseManager.retrieveContext(message, topK = 3)
+
+            val augmentedPrompt = if (systemContext.isNotEmpty()) {
+                """
+                You are a highly qualified Tokutei Kaigo (Nursing Care) training instructor assisting a student.
+                
+                [Verified Training Materials Context]:
+                $systemContext
+                
+                [Student's Question]: 
+                $message
+                
+                [Instructor Response Guide]:
+                Provide a warm, supportive, and precise answer. You MUST write your complete output strictly and entirely in $targetLanguageName.
+                """.trimIndent()
+            } else {
+                """
+                You are a friendly Tokutei Kaigo study tutor. The student is asking: "$message". 
+                CRITICAL RULE: You must respond entirely in $targetLanguageName.
+                Answer warmly, but remind them to verify specific rules with their study guide if you aren't certain.
+                """.trimIndent()
+            }
+
+            val responseBuffer = StringBuilder()
+
+            // Execute on-device computation context
+            currentConversation.sendMessageAsync(augmentedPrompt).collect { responseMessage ->
+                val textChunk = responseMessage.toString()
+                responseBuffer.append(textChunk)
+            }
+
+            val completeOutput = responseBuffer.toString().trim()
+            if (completeOutput.isNotEmpty()) {
+                // 3. Persist the generated response to room database history
+                chatMessageDao.insertMessage(
+                    ChatMessageEntity(text = completeOutput, isUser = false)
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "Error processing model inference pipelines: ${e.localizedMessage}", e)
+        } finally {
+            // 4. Terminate processing UI layout tracking states
+            _isGenerating.value = false
+        }
     }
 
     suspend fun clearChatHistory() = withContext(Dispatchers.IO) {
@@ -121,5 +145,6 @@ class GemmaChatEngine(private val context: Context) {
         conversation = null
         engine = null
         isInitialized = false
+        Log.d(logTag, "Gemma compute allocation hooks released.")
     }
 }

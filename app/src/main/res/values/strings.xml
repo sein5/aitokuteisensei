@@ -1,3 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">AI Tokutei Sensei</string>
+    <string name="onboarding_welcome">Welcome to AI Tokutei Sensei! Please select your preferred language for study support.</string>
+    <string name="onboarding_setup_model">To begin studying offline, please download the AI model file or select an existing local file.</string>
+    <string name="btn_back">Back</string>
+    <string name="btn_continue">Continue</string>
+    <string name="btn_start_learning">Start Learning</string>
+    <string name="state_downloading">Downloading AI Tutor assets... Please keep the app open.</string>
+    <string name="state_setup_complete">AI Tutor setup complete! Ready to assist you anytime.</string>
+    <string name="chat_input_hint">Ask about nursing terms, caregiving techniques, or exam questions...</string>
+    <string name="chat_thinking">Reviewing study guides and analyzing context...</string>
+    <string name="dialog_clear_title">Clear Chat History</string>
+    <string name="dialog_clear_desc">Clear entire chat history? This action cannot be undone.</string>
 </resources>

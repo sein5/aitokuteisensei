@@ -40,6 +40,9 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        generateLocaleConfig = false
+    }
 }
 
 dependencies {
@@ -103,6 +106,9 @@ dependencies {
     ksp("androidx.room:room-compiler:$roomVersion") // Requires KSP plugin
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.compose.material3:material3:1.2.0")
 }
 
 apply(plugin = "io.objectbox")
