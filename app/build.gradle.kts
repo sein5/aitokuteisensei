@@ -101,6 +101,8 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion") // Requires KSP plugin
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
 apply(plugin = "io.objectbox")

@@ -22,16 +22,19 @@ class KnowledgeBaseManager(private val context: Context) {
     private var chunks: List<KnowledgeChunk> = emptyList()
     private var textEmbedder: TextEmbedder? = null
 
-    suspend fun initialize() = withContext(Dispatchers.IO) {
-        // 1. Load JSON from assets and filter by language code "en"
+    // Change your initialize method signature inside KnowledgeBaseManager.kt to this:
+    suspend fun initialize(langCode: String) = withContext(Dispatchers.IO) {
+        // 1. Load JSON from assets and filter by user-selected language code
         val jsonString = context.assets.open("tokutei_kaigo_knowledge_base_updated.json").use { stream ->
             InputStreamReader(stream).readText()
         }
         val itemType = object : TypeToken<List<KnowledgeChunk>>() {}.type
         val allChunks: List<KnowledgeChunk> = Gson().fromJson(jsonString, itemType)
-        chunks = allChunks.filter { it.lang.equals("en", ignoreCase = true) }
 
-        // 2. Initialize MediaPipe Text Embedder with your custom asset
+        // Match against user's selected language code dynamically
+        chunks = allChunks.filter { it.lang.equals(langCode, ignoreCase = true) }
+
+        // 2. Initialize MediaPipe Text Embedder
         val baseOptions = BaseOptions.builder()
             .setModelAssetPath("universal_sentence_encoder.tflite")
             .build()
