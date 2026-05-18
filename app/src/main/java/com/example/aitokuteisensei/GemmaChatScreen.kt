@@ -48,7 +48,6 @@ fun GemmaChatScreen(chatEngine: GemmaChatEngine) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val clipboardManager = LocalClipboardManager.current
 
-    // FIX: Optimized scrolling engine. Snaps instantly using scrollToItem for ultra-smooth rendering performance
     LaunchedEffect(history.size, currentGeneration) {
         val totalItems = history.size + (if (isGenerating) 1 else 0)
         if (totalItems > 0) {
@@ -56,124 +55,137 @@ fun GemmaChatScreen(chatEngine: GemmaChatEngine) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.School,
-                            contentDescription = null,
-                            tint = Color(0xFFFF9800),
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        Text("Tokutei Kaigo Tutor", fontWeight = FontWeight.Bold)
-                    }
-                },
-                // FIX: Trash icon clean removal to prevent unwanted accidental deletion sweeps
-                actions = {},
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            )
-        }
-    ) { paddingValues ->
-        Column(
+    // FIX: Swapped out Scaffold architecture to apply rigid layout clipping bounds
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // FIX: Solid color block drawing over status bar to prevent text bleeding behind icons
+        Spacer(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(history) { message ->
-                    MessageBubbleRow(
-                        message = message,
-                        onCopy = { clipboardManager.setText(AnnotatedString(message.text)) },
-                        onQuote = { textFieldValue = "“${message.text}”\n> $textFieldValue" }
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(Color(0xFFFF9800))
+        )
+
+        // FIX: Static TopAppBar pinned right below the protective background cap block
+        TopAppBar(
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Kaigo Sensei AI",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
+            },
+            actions = {},
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color(0xFFFF9800),
+                titleContentColor = Color.White
+            ),
+            // Set to zero since the Spacer component handles manual alignment above
+            windowInsets = WindowInsets(0, 0, 0, 0)
+        )
 
-                if (isGenerating) {
-                    item {
-                        val currentChunk = currentGeneration
-                        if (!currentChunk.isNullOrBlank()) {
-                            // Text stream display bubble
-                            MessageBubbleRow(
-                                message = ChatMessageEntity(text = currentChunk, isUser = false),
-                                onCopy = { clipboardManager.setText(AnnotatedString(currentChunk)) },
-                                onQuote = { textFieldValue = "“$currentChunk”\n> $textFieldValue" }
-                            )
-                        } else {
-                            // FIX: Displays a pulsating typing element while the backend computes response sequences
-                            TypingIndicatorBubble()
-                        }
+        // Chat Viewport List
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(history) { message ->
+                MessageBubbleRow(
+                    message = message,
+                    onCopy = { clipboardManager.setText(AnnotatedString(message.text)) },
+                    onQuote = { textFieldValue = "“${message.text}”\n> $textFieldValue" }
+                )
+            }
+
+            if (isGenerating) {
+                item {
+                    val currentChunk = currentGeneration
+                    if (!currentChunk.isNullOrBlank()) {
+                        MessageBubbleRow(
+                            message = ChatMessageEntity(text = currentChunk, isUser = false),
+                            onCopy = { clipboardManager.setText(AnnotatedString(currentChunk)) },
+                            onQuote = { textFieldValue = "“$currentChunk”\n> $textFieldValue" }
+                        )
+                    } else {
+                        TypingIndicatorBubble()
                     }
                 }
             }
+        }
 
-            // Bottom input bar
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shadowElevation = 8.dp,
-                color = MaterialTheme.colorScheme.surface
+        // Bottom input bar
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding(),
+            shadowElevation = 8.dp,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .navigationBarsPadding()
-                        .imePadding(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = textFieldValue,
-                        onValueChange = { textFieldValue = it },
-                        placeholder = { Text("Ask your instructor...") },
-                        modifier = Modifier.weight(1f),
-                        maxLines = 4,
-                        shape = RoundedCornerShape(24.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = {
-                            if (textFieldValue.trim().isNotEmpty() && !isGenerating) {
-                                val userPrompt = textFieldValue.trim()
-                                textFieldValue = ""
-                                keyboardController?.hide()
-                                coroutineScope.launch {
-                                    chatEngine.generateResponse(userPrompt)
-                                }
+                OutlinedTextField(
+                    value = textFieldValue,
+                    onValueChange = { textFieldValue = it },
+                    placeholder = { Text("Ask your instructor...") },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 4,
+                    shape = RoundedCornerShape(24.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (textFieldValue.trim().isNotEmpty() && !isGenerating) {
+                            val userPrompt = textFieldValue.trim()
+                            textFieldValue = ""
+                            keyboardController?.hide()
+                            coroutineScope.launch {
+                                chatEngine.generateResponse(userPrompt)
                             }
-                        })
+                        }
+                    })
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = {
+                        if (textFieldValue.trim().isNotEmpty() && !isGenerating) {
+                            val userPrompt = textFieldValue.trim()
+                            textFieldValue = ""
+                            keyboardController?.hide()
+                            coroutineScope.launch {
+                                chatEngine.generateResponse(userPrompt)
+                            }
+                        }
+                    },
+                    enabled = textFieldValue.trim().isNotEmpty() && !isGenerating,
+                    modifier = Modifier.background(
+                        if (textFieldValue.trim().isNotEmpty() && !isGenerating) Color(0xFFFF9800) else Color.LightGray,
+                        shape = CircleShape
                     )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = {
-                            if (textFieldValue.trim().isNotEmpty() && !isGenerating) {
-                                val userPrompt = textFieldValue.trim()
-                                textFieldValue = ""
-                                keyboardController?.hide()
-                                coroutineScope.launch {
-                                    chatEngine.generateResponse(userPrompt)
-                                }
-                            }
-                        },
-                        enabled = textFieldValue.trim().isNotEmpty() && !isGenerating,
-                        modifier = Modifier.background(
-                            if (textFieldValue.trim().isNotEmpty() && !isGenerating) Color(0xFFFF9800) else Color.LightGray,
-                            shape = CircleShape
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Send,
-                            contentDescription = "Send",
-                            tint = Color.White
-                        )
-                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send",
+                        tint = Color.White
+                    )
                 }
             }
         }
@@ -215,7 +227,6 @@ fun MessageBubbleRow(
             )
         }
 
-        // FIX: Smooth contextual utility actions panel that shows up when a user clicks any message bubble
         AnimatedVisibility(
             visible = showActions,
             enter = fadeIn() + expandVertically(),
@@ -246,7 +257,6 @@ fun MessageBubbleRow(
     }
 }
 
-// FIX: Custom animated typewriter loading dots layout block to replace the blank loading state
 @Composable
 fun TypingIndicatorBubble() {
     val infiniteTransition = rememberInfiniteTransition(label = "typing")

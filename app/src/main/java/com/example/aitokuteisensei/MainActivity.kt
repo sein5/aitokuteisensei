@@ -1,5 +1,6 @@
 package com.example.aitokuteisensei
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -10,9 +11,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import com.example.aitokuteisensei.data.UserPreferences
 import com.example.aitokuteisensei.ui.OnboardingScreen
 import java.io.File
@@ -22,6 +27,22 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
+                val view = LocalView.current
+                if (!view.isInEditMode) {
+                    SideEffect {
+                        val window = (view.context as Activity).window
+
+                        // Instruct the system window to handle edge-to-edge calculation constraints
+                        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+                        // FIX: Force system canvas transparency so our Compose solid Spacer holds color control
+                        window.statusBarColor = Color.Transparent.toArgb()
+
+                        val insetsController = WindowCompat.getInsetsController(window, view)
+                        insetsController.isAppearanceLightStatusBars = false
+                    }
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -39,7 +60,6 @@ fun AppNavigationResolver() {
     val internalAppModelFile = remember { File(context.filesDir, "gemma-4-e2b.litertlm") }
     val preferences = remember { UserPreferences(context) }
 
-    // FIX: Set initial value to null to prevent the onboarding UI from flashing on startup
     val isOnboarded by preferences.isOnboardedFlow.collectAsState(initial = null)
     var isVerificationFinished by remember { mutableStateOf(false) }
     var isEngineInitialized by remember { mutableStateOf(false) }
@@ -48,7 +68,6 @@ fun AppNavigationResolver() {
     val chatEngine = remember { GemmaChatEngine(context) }
 
     LaunchedEffect(isOnboarded) {
-        // Wait until DataStore emits the true system configuration state
         if (isOnboarded == null) return@LaunchedEffect
 
         if (isOnboarded == true && internalAppModelFile.exists()) {
@@ -65,14 +84,13 @@ fun AppNavigationResolver() {
         isVerificationFinished = true
     }
 
-    // Guard: Keep displaying the loader until the initial configuration read finishes
     if (isOnboarded == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = androidx.compose.ui.graphics.Color(0xFFFF9800))
+                CircularProgressIndicator(color = Color(0xFFFF9800))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Loading configurations...",
@@ -103,13 +121,12 @@ fun AppNavigationResolver() {
                     }
                 }
                 else -> {
-                    // FIX: Replaced pure spinner with descriptive loading text
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = androidx.compose.ui.graphics.Color(0xFFFF9800))
+                            CircularProgressIndicator(color = Color(0xFFFF9800))
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "Preparing AI Tutor Engine...\nLoading local weights into system memory.",
