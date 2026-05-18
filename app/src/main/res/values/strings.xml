@@ -12,4 +12,7 @@
     <string name="chat_thinking">Reviewing study guides and analyzing context...</string>
     <string name="dialog_clear_title">Clear Chat History</string>
     <string name="dialog_clear_desc">Clear entire chat history? This action cannot be undone.</string>
+
+    <string name="empty_chat_title">Ready to Study?</string>
+    <string name="empty_chat_subtitle">Ask me about nursing terms, caregiving techniques, or specific exam questions to get started.</string>
 </resources>

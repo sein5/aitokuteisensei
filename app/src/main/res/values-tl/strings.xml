@@ -12,4 +12,7 @@
     <string name="chat_thinking">Sinusuri ang mga gabay sa pag-aaral at pinag-aaralan ang konteksto...</string>
     <string name="dialog_clear_title">Burahin ang Kasaysayan</string>
     <string name="dialog_clear_desc">Burahin ang lahat ng kasaysayan ng chat? Ang aksyong ito ay hindi na maaaring bawiin.</string>
+    <string name="empty_chat_title">Handa na Mag-aral?</string>
+    <string name="empty_chat_subtitle">Magtanong sa akin tungkol sa mga nursing term, teknik sa pag-aalaga, o partikular na mga tanong sa pagsusulit para makapagsimula.</string>
+
 </resources>

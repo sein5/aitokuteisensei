@@ -34,6 +34,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.example.aitokuteisensei.data.ChatMessageEntity
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.example.aitokuteisensei.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,38 +97,110 @@ fun GemmaChatScreen(chatEngine: GemmaChatEngine) {
             windowInsets = WindowInsets(0, 0, 0, 0)
         )
 
-        // Chat Viewport List
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(history) { message ->
-                MessageBubbleRow(
-                    message = message,
-                    onCopy = { clipboardManager.setText(AnnotatedString(message.text)) },
-                    onQuote = { textFieldValue = "“${message.text}”\n> $textFieldValue" }
-                )
-            }
+        // --- Replace the existing LazyColumn block with this conditional layout ---
 
-            if (isGenerating) {
-                item {
-                    val currentChunk = currentGeneration
-                    if (!currentChunk.isNullOrBlank()) {
-                        MessageBubbleRow(
-                            message = ChatMessageEntity(text = currentChunk, isUser = false),
-                            onCopy = { clipboardManager.setText(AnnotatedString(currentChunk)) },
-                            onQuote = { textFieldValue = "“$currentChunk”\n> $textFieldValue" }
-                        )
-                    } else {
-                        TypingIndicatorBubble()
+        if (history.isEmpty() && !isGenerating) {
+            // Empty State Viewport
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800).copy(alpha = 0.5f),
+                        modifier = Modifier.size(80.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = stringResource(R.string.empty_chat_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.empty_chat_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            // Chat Viewport List
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(history) { message ->
+                    MessageBubbleRow(
+                        message = message,
+                        onCopy = { clipboardManager.setText(AnnotatedString(message.text)) },
+                        onQuote = { textFieldValue = "“${message.text}”\n> $textFieldValue" }
+                    )
+                }
+
+                if (isGenerating) {
+                    item {
+                        val currentChunk = currentGeneration
+                        if (!currentChunk.isNullOrBlank()) {
+                            MessageBubbleRow(
+                                message = ChatMessageEntity(text = currentChunk, isUser = false),
+                                onCopy = { clipboardManager.setText(AnnotatedString(currentChunk)) },
+                                onQuote = { textFieldValue = "“$currentChunk”\n> $textFieldValue" }
+                            )
+                        } else {
+                            TypingIndicatorBubble()
+                        }
                     }
                 }
             }
         }
+
+        // Bottom input bar remains the same below this...
+
+//        // Chat Viewport List
+//        LazyColumn(
+//            state = listState,
+//            modifier = Modifier
+//                .weight(1f)
+//                .fillMaxWidth(),
+//            contentPadding = PaddingValues(16.dp),
+//            verticalArrangement = Arrangement.spacedBy(12.dp)
+//        ) {
+//            items(history) { message ->
+//                MessageBubbleRow(
+//                    message = message,
+//                    onCopy = { clipboardManager.setText(AnnotatedString(message.text)) },
+//                    onQuote = { textFieldValue = "“${message.text}”\n> $textFieldValue" }
+//                )
+//            }
+//
+//            if (isGenerating) {
+//                item {
+//                    val currentChunk = currentGeneration
+//                    if (!currentChunk.isNullOrBlank()) {
+//                        MessageBubbleRow(
+//                            message = ChatMessageEntity(text = currentChunk, isUser = false),
+//                            onCopy = { clipboardManager.setText(AnnotatedString(currentChunk)) },
+//                            onQuote = { textFieldValue = "“$currentChunk”\n> $textFieldValue" }
+//                        )
+//                    } else {
+//                        TypingIndicatorBubble()
+//                    }
+//                }
+//            }
+//        }
 
         // Bottom input bar
         Surface(

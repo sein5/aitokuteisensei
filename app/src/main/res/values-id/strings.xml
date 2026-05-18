@@ -12,4 +12,7 @@
     <string name="chat_thinking">Memeriksa panduan belajar dan menganalisis konteks...</string>
     <string name="dialog_clear_title">Hapus Riwayat</string>
     <string name="dialog_clear_desc">Hapus semua riwayat obrolan? Tindakan ini tidak dapat dibatalkan.</string>
+
+    <string name="empty_chat_title">Siap untuk Belajar?</string>
+    <string name="empty_chat_subtitle">Tanyakan kepada saya tentang istilah keperawatan, teknik perawatan, atau soal ujian spesifik untuk memulai.</string>
 </resources>

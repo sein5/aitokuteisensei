@@ -12,4 +12,7 @@
     <string name="chat_thinking">テキストを分析し、最適な回答を考えています...</string>
     <string name="dialog_clear_title">チャット履歴を消去</string>
     <string name="dialog_clear_desc">チャット履歴をすべて消去しますか？この操作は戻せません。</string>
+    <string name="empty_chat_title">学習を始めましょう！</string>
+    <string name="empty_chat_subtitle">介護の用語、介助技術、または具体的な試験問題について質問して、学習を開始しましょう。</string>
+
 </resources>
