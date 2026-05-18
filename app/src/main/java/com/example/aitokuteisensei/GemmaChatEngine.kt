@@ -33,109 +33,139 @@ class GemmaChatEngine(private val context: Context) {
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating = _isGenerating.asStateFlow()
 
+    private val _currentGeneration = MutableStateFlow<String?>(null)
+    val currentGeneration = _currentGeneration.asStateFlow()
+
     var isInitialized = false
         private set
 
     private val langNameMap = mapOf(
-        "ja" to "Japanese",
-        "en" to "English",
-        "zh" to "Chinese",
-        "id" to "Indonesian",
-        "tl" to "Tagalog"
+        "ja" to "Japanese", "en" to "English", "zh" to "Chinese",
+        "id" to "Indonesian", "tl" to "Tagalog"
     )
 
-    suspend fun initialize(modelFile: File) = withContext(Dispatchers.IO) {
-        if (isInitialized) return@withContext
+    suspend fun initialize(modelFile: File): Boolean = withContext(Dispatchers.IO) {
+        if (isInitialized) return@withContext true
         try {
+            Log.d(logTag, "Starting Engine Initialization with file: ${modelFile.absolutePath}")
             userLang = userPreferences.languageFlow.first()
-
-            // Sync local vectorized matching structures
             knowledgeBaseManager.initialize(userLang)
 
-            val engineConfig = EngineConfig(modelFile.absolutePath)
-            val initializedEngine = Engine(engineConfig)
-            engine = initializedEngine
+            // Setup configuration pointing to the downloaded model bundle
+            val engineConfig = EngineConfig(modelPath = modelFile.absolutePath)
+            val newEngine = Engine(engineConfig)
 
-            val conversationConfig = ConversationConfig(
-                samplerConfig = SamplerConfig(
-                    topK = 40,
-                    topP = 0.95,
-                    temperature = 0.7
-                )
-            )
-            conversation = initializedEngine.createConversation(conversationConfig)
+            // FIX: Explicitly invoke the native engine initialization lifecycle step
+            newEngine.initialize()
+
+            engine = newEngine
+
+            // Once fully initialized, it is safe to set up the default conversation session
+            resetConversation()
+
             isInitialized = true
-            Log.d(logTag, "Gemma Local Hardware inference engine context bound successfully.")
+            Log.d(logTag, "✅ Gemma Engine successfully loaded into memory and verified operational!")
+            return@withContext true
         } catch (e: Exception) {
-            Log.e(logTag, "Failed to instantiate local LLM execution framework: ${e.localizedMessage}", e)
+            Log.e(logTag, "❌ Critical Failure instantiating LLM: ${e.localizedMessage}", e)
             isInitialized = false
+            return@withContext false
         }
     }
 
+    private fun resetConversation() {
+        try {
+            conversation?.close()
+        } catch (e: Exception) {
+            Log.w(logTag, "Error closing previous conversation channel state: ${e.message}")
+        }
+
+        val targetEngine = engine ?: throw IllegalStateException("Cannot reset conversation: Engine target is unassigned.")
+        val conversationConfig = ConversationConfig(
+            samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.7)
+        )
+        conversation = targetEngine.createConversation(conversationConfig)
+        Log.d(logTag, "Conversation session initialized successfully.")
+    }
+
+    private fun cleanGemma4E2bOutput(raw: String): String {
+        return raw.replace(Regex("<\\|channel>thought\n.*?<channel\\|>", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("<\\|channel>thought\n.*", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("<\\|think\\|>.*?</\\|think\\|>", RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("<\\|think\\|>.*", RegexOption.DOT_MATCHES_ALL), "")
+            .trim()
+    }
+
     suspend fun generateResponse(message: String) = withContext(Dispatchers.IO) {
-        val currentConversation = conversation ?: return@withContext
         val targetLanguageName = langNameMap[userLang] ?: "English"
 
-        // 1. Commit the user prompt into structural storage layout right now
-        chatMessageDao.insertMessage(
-            ChatMessageEntity(text = message, isUser = true)
-        )
+        Log.d(logTag, "User initiated prompt: $message")
+        chatMessageDao.insertMessage(ChatMessageEntity(text = message, isUser = true))
 
-        // 2. Flip system processing execution flag to trigger UI shimmer layout
         _isGenerating.value = true
+        _currentGeneration.value = ""
 
         try {
+            if (!isInitialized || engine == null) {
+                Log.e(logTag, "Inference rejected: Engine is uninitialized.")
+                chatMessageDao.insertMessage(ChatMessageEntity(text = "[System Error]: AI Engine uninitialized.", isUser = false))
+                return@withContext
+            }
+
+            resetConversation()
+            val currentConversation = conversation
+            if (currentConversation == null) {
+                Log.e(logTag, "Conversation instance is unavailable.")
+                chatMessageDao.insertMessage(ChatMessageEntity(text = "[System Error]: Conversational layout state mapping failure.", isUser = false))
+                return@withContext
+            }
+
+            Log.d(logTag, "Retrieving RAG context...")
             val systemContext = knowledgeBaseManager.retrieveContext(message, topK = 3)
 
+            val recentHistory = historyFlow.first().takeLast(4)
+            val historyText = recentHistory.joinToString("\n") {
+                (if (it.isUser) "Student" else "Instructor") + ": " + it.text
+            }
+
             val augmentedPrompt = if (systemContext.isNotEmpty()) {
-                """
-                You are a highly qualified Tokutei Kaigo (Nursing Care) training instructor assisting a student.
-                
-                [Verified Training Materials Context]:
-                $systemContext
-                
-                [Student's Question]: 
-                $message
-                
-                [Instructor Response Guide]:
-                Provide a warm, supportive, and precise answer. You MUST write your complete output strictly and entirely in $targetLanguageName.
-                """.trimIndent()
+                "You are a Tokutei Kaigo instructor.\n[Context]: $systemContext\n[History]: $historyText\n[Student]: $message\nReply strictly in $targetLanguageName."
             } else {
-                """
-                You are a friendly Tokutei Kaigo study tutor. The student is asking: "$message". 
-                CRITICAL RULE: You must respond entirely in $targetLanguageName.
-                Answer warmly, but remind them to verify specific rules with their study guide if you aren't certain.
-                """.trimIndent()
+                "You are a friendly Tokutei Kaigo tutor.\n[History]: $historyText\n[Student]: $message\nReply strictly in $targetLanguageName."
             }
 
-            val responseBuffer = StringBuilder()
+            Log.d(logTag, "Sending prompt to model pipeline...")
+            val rawBuffer = StringBuilder()
 
-            // Execute on-device computation context
             currentConversation.sendMessageAsync(augmentedPrompt).collect { responseMessage ->
-                val textChunk = responseMessage.toString()
-                responseBuffer.append(textChunk)
+                val chunk = responseMessage.toString()
+                rawBuffer.append(chunk)
+
+                val cleanedText = cleanGemma4E2bOutput(rawBuffer.toString())
+                _currentGeneration.value = cleanedText
             }
 
-            val completeOutput = responseBuffer.toString().trim()
-            if (completeOutput.isNotEmpty()) {
-                // 3. Persist the generated response to room database history
-                chatMessageDao.insertMessage(
-                    ChatMessageEntity(text = completeOutput, isUser = false)
-                )
+            val finalCleanOutput = _currentGeneration.value?.trim() ?: ""
+            Log.d(logTag, "Generation Complete. Output Length: ${finalCleanOutput.length}")
+
+            if (finalCleanOutput.isNotEmpty()) {
+                chatMessageDao.insertMessage(ChatMessageEntity(text = finalCleanOutput, isUser = false))
+            } else {
+                chatMessageDao.insertMessage(ChatMessageEntity(text = "[System Note]: The model generated an empty response.", isUser = false))
             }
+
         } catch (e: Exception) {
-            Log.e(logTag, "Error processing model inference pipelines: ${e.localizedMessage}", e)
+            Log.e(logTag, "❌ Inference crashed: ${e.localizedMessage}", e)
+            chatMessageDao.insertMessage(ChatMessageEntity(text = "An error occurred during inference: ${e.localizedMessage}", isUser = false))
         } finally {
-            // 4. Terminate processing UI layout tracking states
             _isGenerating.value = false
+            _currentGeneration.value = null
         }
     }
 
     suspend fun clearChatHistory() = withContext(Dispatchers.IO) {
         chatMessageDao.clearHistory()
-        conversation?.close()
-        val conversationConfig = ConversationConfig(samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.7))
-        conversation = engine?.createConversation(conversationConfig)
+        runCatching { resetConversation() }
     }
 
     fun close() {
@@ -145,6 +175,5 @@ class GemmaChatEngine(private val context: Context) {
         conversation = null
         engine = null
         isInitialized = false
-        Log.d(logTag, "Gemma compute allocation hooks released.")
     }
 }

@@ -1,6 +1,7 @@
 package com.example.aitokuteisensei
 
 import android.content.Context
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -19,50 +20,58 @@ data class KnowledgeChunk(
 )
 
 class KnowledgeBaseManager(private val context: Context) {
+    private val logTag = "KnowledgeBase"
     private var chunks: List<KnowledgeChunk> = emptyList()
     private var textEmbedder: TextEmbedder? = null
 
-    // Change your initialize method signature inside KnowledgeBaseManager.kt to this:
     suspend fun initialize(langCode: String) = withContext(Dispatchers.IO) {
-        // 1. Load JSON from assets and filter by user-selected language code
-        val jsonString = context.assets.open("tokutei_kaigo_knowledge_base_updated.json").use { stream ->
-            InputStreamReader(stream).readText()
+        // 1. Safely load JSON
+        try {
+            val jsonString = context.assets.open("tokutei_kaigo_knowledge_base_updated.json").use { stream ->
+                InputStreamReader(stream).readText()
+            }
+            val itemType = object : TypeToken<List<KnowledgeChunk>>() {}.type
+            val allChunks: List<KnowledgeChunk> = Gson().fromJson(jsonString, itemType)
+            chunks = allChunks.filter { it.lang.equals(langCode, ignoreCase = true) }
+            Log.d(logTag, "Successfully loaded ${chunks.size} knowledge chunks for lang: $langCode")
+        } catch (e: Exception) {
+            Log.e(logTag, "Failed to load knowledge base JSON: ${e.message}")
+            chunks = emptyList()
         }
-        val itemType = object : TypeToken<List<KnowledgeChunk>>() {}.type
-        val allChunks: List<KnowledgeChunk> = Gson().fromJson(jsonString, itemType)
 
-        // Match against user's selected language code dynamically
-        chunks = allChunks.filter { it.lang.equals(langCode, ignoreCase = true) }
-
-        // 2. Initialize MediaPipe Text Embedder
-        val baseOptions = BaseOptions.builder()
-            .setModelAssetPath("universal_sentence_encoder.tflite")
-            .build()
-        val options = TextEmbedder.TextEmbedderOptions.builder()
-            .setBaseOptions(baseOptions)
-            .build()
-        textEmbedder = TextEmbedder.createFromOptions(context, options)
+        // 2. Safely initialize Embedder
+        try {
+            val baseOptions = BaseOptions.builder()
+                .setModelAssetPath("universal_sentence_encoder.tflite")
+                .build()
+            val options = TextEmbedder.TextEmbedderOptions.builder()
+                .setBaseOptions(baseOptions)
+                .build()
+            textEmbedder = TextEmbedder.createFromOptions(context, options)
+            Log.d(logTag, "Text Embedder initialized successfully.")
+        } catch (e: Exception) {
+            Log.e(logTag, "Failed to initialize Text Embedder (Missing TFLite file?): ${e.message}")
+            textEmbedder = null
+        }
     }
 
     fun retrieveContext(query: String, topK: Int = 3): String {
-        val embedder = textEmbedder ?: return ""
-        if (chunks.isEmpty()) return ""
-
-        // Generate embedding vector for the user query
-        val embeddingResult = embedder.embed(query)
-        val queryVector = embeddingResult.embeddingResult().embeddings().firstOrNull()?.floatEmbedding() ?: return ""
-
-        // Score chunks using Cosine Similarity
-        val scoredChunks = chunks.map { chunk ->
-            val score = cosineSimilarity(queryVector, chunk.embedding)
-            chunk to score
+        val embedder = textEmbedder
+        if (embedder == null || chunks.isEmpty()) {
+            Log.w(logTag, "Retrieval skipped: Embedder or Chunks missing.")
+            return ""
         }
 
-        // Return top matches concatenated together
-        return scoredChunks
-            .sortedByDescending { it.second }
-            .take(topK)
-            .joinToString("\n\n") { it.first.text }
+        try {
+            val embeddingResult = embedder.embed(query)
+            val queryVector = embeddingResult.embeddingResult().embeddings().firstOrNull()?.floatEmbedding() ?: return ""
+
+            val scoredChunks = chunks.map { chunk -> chunk to cosineSimilarity(queryVector, chunk.embedding) }
+            return scoredChunks.sortedByDescending { it.second }.take(topK).joinToString("\n\n") { it.first.text }
+        } catch (e: Exception) {
+            Log.e(logTag, "Error during RAG retrieval: ${e.message}")
+            return ""
+        }
     }
 
     private fun cosineSimilarity(v1: FloatArray, v2: FloatArray): Float {
