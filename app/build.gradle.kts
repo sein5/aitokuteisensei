@@ -95,6 +95,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:latest.release")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:latest.release")
     implementation("com.google.code.gson:gson:latest.release")
+
+    val roomVersion = "2.6.1" // Use the latest stable version
+
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion") // Requires KSP plugin
 }
 
 apply(plugin = "io.objectbox")
