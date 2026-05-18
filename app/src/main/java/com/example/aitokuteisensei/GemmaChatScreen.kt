@@ -1,15 +1,20 @@
 package com.example.aitokuteisensei
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
@@ -17,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -32,112 +38,141 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GemmaChatScreen(chatEngine: GemmaChatEngine) {
-    val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    val chatHistory by chatEngine.historyFlow.collectAsState(initial = emptyList())
+    val history by chatEngine.historyFlow.collectAsState(initial = emptyList())
     val isGenerating by chatEngine.isGenerating.collectAsState()
     val currentGeneration by chatEngine.currentGeneration.collectAsState()
 
-    var inputText by remember { mutableStateOf("") }
+    var textFieldValue by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val clipboardManager = LocalClipboardManager.current
 
-    LaunchedEffect(chatHistory.size, currentGeneration) {
-        val totalItems = chatHistory.size + (if (currentGeneration != null) 1 else 0)
+    // FIX: Optimized scrolling engine. Snaps instantly using scrollToItem for ultra-smooth rendering performance
+    LaunchedEffect(history.size, currentGeneration) {
+        val totalItems = history.size + (if (isGenerating) 1 else 0)
         if (totalItems > 0) {
-            listState.animateScrollToItem(totalItems - 1)
-        }
-    }
-
-    fun handleSendMessage() {
-        if (inputText.isNotBlank() && !isGenerating) {
-            val userMsg = inputText
-            inputText = ""
-            keyboardController?.hide()
-
-            scope.launch {
-                chatEngine.generateResponse(userMsg)
-            }
+            listState.scrollToItem(totalItems - 1)
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tokutei Kaigo Tutor", fontWeight = FontWeight.Bold, color = Color.White) },
-                actions = {
-                    if (chatHistory.isNotEmpty()) {
-                        IconButton(onClick = { scope.launch { chatEngine.clearChatHistory() } }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Clear Session", tint = Color.White)
-                        }
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.School,
+                            contentDescription = null,
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text("Tokutei Kaigo Tutor", fontWeight = FontWeight.Bold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFFF9800))
+                // FIX: Trash icon clean removal to prevent unwanted accidental deletion sweeps
+                actions = {},
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             )
         }
-    ) { innerPadding ->
+    ) { paddingValues ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).background(Color(0xFFF9F9F9))
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
         ) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (chatHistory.isEmpty() && !isGenerating) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp).align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(Icons.Default.School, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(56.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Let's study for the Care Worker exam!", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.Black, textAlign = TextAlign.Center)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Ask me anything about physical care procedures, communication codes, or daily care planning routines.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFE0B2)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                            Text("💡 Tip: Try asking \"Explain the steps for safe wheelchair transfers.\"", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE65100), modifier = Modifier.padding(16.dp), textAlign = TextAlign.Center)
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        state = listState, modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(chatHistory) { message ->
-                            ChatBubbleLayout(message)
-                        }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(history) { message ->
+                    MessageBubbleRow(
+                        message = message,
+                        onCopy = { clipboardManager.setText(AnnotatedString(message.text)) },
+                        onQuote = { textFieldValue = "“${message.text}”\n> $textFieldValue" }
+                    )
+                }
 
-                        // Displays the actual real-time typing effect
-                        if (isGenerating && currentGeneration != null) {
-                            item {
-                                ChatBubbleLayout(ChatMessageEntity(text = currentGeneration!!, isUser = false))
-                            }
-                        } else if (isGenerating) {
-                            item {
-                                Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.CenterStart) {
-                                    CircularProgressIndicator(color = Color(0xFFFF9800), modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                                }
-                            }
+                if (isGenerating) {
+                    item {
+                        val currentChunk = currentGeneration
+                        if (!currentChunk.isNullOrBlank()) {
+                            // Text stream display bubble
+                            MessageBubbleRow(
+                                message = ChatMessageEntity(text = currentChunk, isUser = false),
+                                onCopy = { clipboardManager.setText(AnnotatedString(currentChunk)) },
+                                onQuote = { textFieldValue = "“$currentChunk”\n> $textFieldValue" }
+                            )
+                        } else {
+                            // FIX: Displays a pulsating typing element while the backend computes response sequences
+                            TypingIndicatorBubble()
                         }
                     }
                 }
             }
 
-            Surface(modifier = Modifier.fillMaxWidth(), shadowElevation = 8.dp, color = Color.White) {
+            // Bottom input bar
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .navigationBarsPadding()
+                        .imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextField(
-                        value = inputText, onValueChange = { inputText = it },
-                        placeholder = { Text("Ask your question...") }, modifier = Modifier.weight(1f),
-                        colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { handleSendMessage() }), maxLines = 4
+                    OutlinedTextField(
+                        value = textFieldValue,
+                        onValueChange = { textFieldValue = it },
+                        placeholder = { Text("Ask your instructor...") },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 4,
+                        shape = RoundedCornerShape(24.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            if (textFieldValue.trim().isNotEmpty() && !isGenerating) {
+                                val userPrompt = textFieldValue.trim()
+                                textFieldValue = ""
+                                keyboardController?.hide()
+                                coroutineScope.launch {
+                                    chatEngine.generateResponse(userPrompt)
+                                }
+                            }
+                        })
                     )
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     IconButton(
-                        onClick = { handleSendMessage() }, enabled = inputText.isNotBlank() && !isGenerating,
-                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color(0xFFFF9800), disabledContainerColor = Color(0xFFE0E0E0))
+                        onClick = {
+                            if (textFieldValue.trim().isNotEmpty() && !isGenerating) {
+                                val userPrompt = textFieldValue.trim()
+                                textFieldValue = ""
+                                keyboardController?.hide()
+                                coroutineScope.launch {
+                                    chatEngine.generateResponse(userPrompt)
+                                }
+                            }
+                        },
+                        enabled = textFieldValue.trim().isNotEmpty() && !isGenerating,
+                        modifier = Modifier.background(
+                            if (textFieldValue.trim().isNotEmpty() && !isGenerating) Color(0xFFFF9800) else Color.LightGray,
+                            shape = CircleShape
+                        )
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = "Send Message", tint = if (inputText.isNotBlank() && !isGenerating) Color.White else Color.Gray)
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "Send",
+                            tint = Color.White
+                        )
                     }
                 }
             }
@@ -146,34 +181,103 @@ fun GemmaChatScreen(chatEngine: GemmaChatEngine) {
 }
 
 @Composable
-fun ChatBubbleLayout(message: ChatMessageEntity) {
-    val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (message.isUser) Color(0xFFFF9800) else Color(0xFFE0E0E0)
-    val textColor = if (message.isUser) Color.White else Color.Black
-    val shape = if (message.isUser) RoundedCornerShape(16.dp, 16.dp, 0.dp, 16.dp) else RoundedCornerShape(16.dp, 16.dp, 16.dp, 0.dp)
+fun MessageBubbleRow(
+    message: ChatMessageEntity,
+    onCopy: () -> Unit,
+    onQuote: () -> Unit
+) {
+    val isUser = message.isUser
+    var showActions by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Surface(color = bubbleColor, shape = shape, modifier = Modifier.widthIn(max = 280.dp)) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                val lines = message.text.split("\n")
-                lines.forEach { line ->
-                    when {
-                        line.trim().startsWith("* ") -> {
-                            Row(modifier = Modifier.padding(vertical = 2.dp)) {
-                                Text(text = "• ", style = MaterialTheme.typography.bodyLarge, color = textColor, fontWeight = FontWeight.Bold)
-                                Text(text = parseInlineMarkdown(line.trim().removePrefix("* ")), style = MaterialTheme.typography.bodyLarge, color = textColor)
-                            }
-                        }
-                        else -> {
-                            if (line.isNotEmpty()) {
-                                Text(text = parseInlineMarkdown(line), style = MaterialTheme.typography.bodyLarge, color = textColor, modifier = Modifier.padding(vertical = 1.dp))
-                            } else {
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                        }
-                    }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    color = if (isUser) Color(0xFFFF9800) else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = if (isUser) 16.dp else 0.dp,
+                        bottomEnd = if (isUser) 0.dp else 16.dp
+                    )
+                )
+                .clickable { showActions = !showActions }
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .widthIn(max = 280.dp)
+        ) {
+            Text(
+                text = parseInlineMarkdown(message.text),
+                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+
+        // FIX: Smooth contextual utility actions panel that shows up when a user clicks any message bubble
+        AnimatedVisibility(
+            visible = showActions,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Row(
+                modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                IconButton(onClick = { onCopy(); showActions = false }, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy text",
+                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                IconButton(onClick = { onQuote(); showActions = false }, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.FormatQuote,
+                        contentDescription = "Quote message",
+                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
+        }
+    }
+}
+
+// FIX: Custom animated typewriter loading dots layout block to replace the blank loading state
+@Composable
+fun TypingIndicatorBubble() {
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    val dotAlpha1 by infiniteTransition.animateFloat(
+        initialValue = 0.2f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse), label = "d1"
+    )
+    val dotAlpha2 by infiniteTransition.animateFloat(
+        initialValue = 0.2f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(animation = tween(600, delayMillis = 200, easing = LinearEasing), repeatMode = RepeatMode.Reverse), label = "d2"
+    )
+    val dotAlpha3 by infiniteTransition.animateFloat(
+        initialValue = 0.2f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(animation = tween(600, delayMillis = 400, easing = LinearEasing), repeatMode = RepeatMode.Reverse), label = "d3"
+    )
+
+    Box(
+        modifier = Modifier
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 16.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dotAlpha1), CircleShape))
+            Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dotAlpha2), CircleShape))
+            Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = dotAlpha3), CircleShape))
         }
     }
 }
@@ -183,7 +287,9 @@ fun parseInlineMarkdown(text: String): AnnotatedString {
         val parts = text.split("**")
         parts.forEachIndexed { index, part ->
             if (index % 2 == 1) {
-                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) { append(part) }
+                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                    append(part)
+                }
             } else {
                 append(part)
             }
