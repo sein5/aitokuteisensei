@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 
 class GemmaChatEngine(private val context: Context) {
 
@@ -21,7 +23,6 @@ class GemmaChatEngine(private val context: Context) {
     suspend fun initialize(modelPath: String) = withContext(Dispatchers.IO) {
         if (isInitialized) return@withContext
 
-        // Initialize RAG knowledge base first
         knowledgeBaseManager.initialize()
 
         val modelFile = File(modelPath)
@@ -34,7 +35,21 @@ class GemmaChatEngine(private val context: Context) {
         loadedEngine.initialize()
 
         engine = loadedEngine
-        conversation = loadedEngine.createConversation()
+
+        // 1. Configure sampling behavior to loosen up text generation
+        val samplerConfig = SamplerConfig(
+            topK = 40,
+            topP = 0.95,
+            temperature = 0.5 // Higher value = more conversational/loose behavior
+        )
+
+        // 2. Wrap it inside the ConversationConfig
+        val conversationConfig = ConversationConfig(
+            samplerConfig = samplerConfig
+        )
+
+        // 3. Instantiate the conversation with your customized parameters
+        conversation = loadedEngine.createConversation(conversationConfig)
         isInitialized = true
     }
 
@@ -42,14 +57,31 @@ class GemmaChatEngine(private val context: Context) {
         val currentConversation = conversation
             ?: throw IllegalStateException("Engine or Conversation not initialized")
 
-        // Retrieve background context using local query embedding
-        val contextText = knowledgeBaseManager.retrieveContext(message)
+        val contextText = knowledgeBaseManager.retrieveContext(message, 5)
 
-        // Formulate the augmented prompt payload
+        // Revamped prompt for an educational, loose, yet grounded tone
         val augmentedPrompt = if (contextText.isNotEmpty()) {
-            "Use the following pieces of context to answer the question at the end. If you don't know the answer, say that you don't know.\n\nContext:\n$contextText\n\nQuestion: $message\nAnswer:"
+            """
+        You are a friendly, warm, and encouraging Tokutei Kaigo (Nursing Care) study partner and tutor. 
+        Your goal is to help the student learn and pass their exam. 
+        
+        Using the textbook context provided below, explain the concepts clearly to the student. 
+        You can use simple wording, offer conversational encouragement, or rephrase the concept to be easier to digest, but make sure your facts match the text.
+        
+        [Textbook Context]:
+        $contextText
+        
+        [Student's Question]: 
+        $message
+        
+        [Tutor's Response]:
+        """.trimIndent()
         } else {
-            message
+            // Fallback if no specific textbook context matches
+            """
+        You are a friendly Tokutei Kaigo study tutor. The student is asking: "$message". 
+        Answer warmly, but remind them to verify specific rules with their study guide if you aren't certain.
+        """.trimIndent()
         }
 
         currentConversation.sendMessageAsync(augmentedPrompt).collect { responseMessage ->
