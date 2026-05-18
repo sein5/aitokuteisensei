@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
+
+    //id("io.objectbox")
 }
 
 android {
@@ -85,4 +87,14 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     "ksp"(libs.androidx.room.compiler)
     "ksp"(libs.moshi.kotlin.codegen)
+    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
+    implementation("com.google.mediapipe:tasks-text:latest.release")
+    debugImplementation("io.objectbox:objectbox-android-objectbrowser:4.0.0")
+    releaseImplementation("io.objectbox:objectbox-android:4.0.0")
+
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:latest.release")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:latest.release")
+    implementation("com.google.code.gson:gson:latest.release")
 }
+
+apply(plugin = "io.objectbox")
