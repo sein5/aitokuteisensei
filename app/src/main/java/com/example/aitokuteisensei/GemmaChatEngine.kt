@@ -82,7 +82,7 @@ class GemmaChatEngine(private val context: Context) {
 
         val targetEngine = engine ?: throw IllegalStateException("Cannot reset conversation: Engine target is unassigned.")
         val conversationConfig = ConversationConfig(
-            samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.7)
+            samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.5)
         )
         conversation = targetEngine.createConversation(conversationConfig)
         Log.d(logTag, "Conversation session initialized successfully.")
@@ -121,7 +121,7 @@ class GemmaChatEngine(private val context: Context) {
             }
 
             Log.d(logTag, "Retrieving RAG context...")
-            val systemContext = knowledgeBaseManager.retrieveContext(message, topK = 3)
+            val systemContext = knowledgeBaseManager.retrieveContext(message, topK = 4)
 
             val recentHistory = historyFlow.first().takeLast(4)
             val historyText = recentHistory.joinToString("\n") {
